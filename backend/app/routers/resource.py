@@ -29,6 +29,10 @@ def list_entries(
     status: str | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     size: int = Query(default=20, ge=1, le=200),
+    dispatch: bool = Query(default=False),
+    batch: str | None = Query(default=None),
+    owner: str | None = Query(default=None),
+    include_residue: bool = Query(default=False),
 ) -> PageResult[dict]:
     service = require_service(module)
     filters = {
@@ -37,7 +41,8 @@ def list_entries(
         if key in service.LIST_FIELDS and value.strip()
     }
     items, total = service.list_entries(
-        filters=filters, keyword=keyword, status=status, page=page, size=size)
+        filters=filters, keyword=keyword, status=status, page=page, size=size,
+        dispatch=dispatch, batch=batch, owner=owner, include_residue=include_residue)
     return PageResult(items=items, total=total, page=page, size=size)
 
 

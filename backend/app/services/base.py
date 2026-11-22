@@ -23,6 +23,10 @@ class BaseModuleService:
         status: str | None = None,
         page: int = 1,
         size: int = 20,
+        dispatch: bool = False,
+        batch: str | None = None,
+        owner: str | None = None,
+        include_residue: bool = False,
     ) -> tuple[list[dict[str, Any]], int]:
         rows = list(store.rows(self.MODULE))
         for field, expected in (filters or {}).items():
@@ -53,6 +57,11 @@ class BaseModuleService:
         rows = store.rows(self.MODULE)
         entry = {"id": max((int(row.get("id", 0)) for row in rows), default=0) + 1}
         entry.update({field: values.get(field) for field in self.LIST_FIELDS})
+        # 额外业务字段（如归属分类、分类成员、标签编号）也要落库，
+        # 否则只能证明“登记过”，无法参与后续归属判定。
+        for field, value in values.items():
+            if field not in entry and field != "id":
+                entry[field] = value
         entry["status"] = self.STATUS_ORDER[0]
         entry["pending"] = True
         entry["abnormal"] = False

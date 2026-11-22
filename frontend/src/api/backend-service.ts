@@ -7,8 +7,15 @@ export { moduleMeta }
 export async function listEntries(
   key: string,
   filters: Record<string, string> = {},
+  options: { dispatch?: boolean; batch?: string; owner?: string; includeResidue?: boolean } = {},
 ): Promise<PageResult> {
-  const query = new URLSearchParams(filters).toString()
+  const params = new URLSearchParams(filters)
+  // 待办同步选区：只取真正应派发的按归属返修，兼容历史批次。
+  if (options.dispatch) params.set('dispatch', 'true')
+  if (options.batch) params.set('batch', options.batch)
+  if (options.owner) params.set('owner', options.owner)
+  if (options.includeResidue) params.set('include_residue', 'true')
+  const query = params.toString()
   const response = await request(`/api/${key}?${query}`)
   if (!response.ok) throw new Error('业务数据读取失败')
   return await response.json()

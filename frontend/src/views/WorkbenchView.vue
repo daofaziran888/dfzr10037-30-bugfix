@@ -37,10 +37,31 @@
       <button class="btn ghost" data-testid="reset" type="button" @click="resetFilters">重置条件</button>
     </form>
 
+    <!-- 元数据标注：待办同步只接收按归属的标签返修，兼容历史批次。 -->
+    <form v-if="meta.key === 'metadata_tag'" class="filter-bar dispatch-bar" @submit.prevent="reload">
+      <label class="filter-item checkbox">
+        <input v-model="dispatchOnly" data-testid="dispatch-only" type="checkbox" @change="reload" />
+        <span>只看待办同步（按归属返修）</span>
+      </label>
+      <label class="filter-item">
+        <span>返修批次</span>
+        <input v-model="dispatchBatch" data-testid="dispatch-batch" placeholder="留空=全部，legacy=历史批次" @change="reload" />
+      </label>
+      <label class="filter-item">
+        <span>归属分类</span>
+        <input v-model="dispatchOwner" data-testid="dispatch-owner" placeholder="如 TAXO-0001" @change="reload" />
+      </label>
+      <label class="filter-item checkbox">
+        <input v-model="includeResidue" data-testid="include-residue" type="checkbox" @change="reload" />
+        <span>追溯历史残留样本</span>
+      </label>
+    </form>
+
     <table class="data-table">
       <thead>
         <tr>
           <th v-for="column in meta.fields" :key="column">{{ column }}</th>
+          <th v-if="isMetadataTag">标签归属</th>
           <th>当前状态</th>
           <th>可执行动作</th>
         </tr>
@@ -48,6 +69,7 @@
       <tbody>
         <tr v-for="row in rows" :key="String(row.id)" :data-testid="`row-${row.id}`" :data-status="String(row.status)">
           <td v-for="column in meta.fields" :key="column">{{ row[column] ?? '—' }}</td>
+          <td v-if="isMetadataTag" class="tag-owner">{{ ownerLabel(row) }}</td>
           <td>{{ row.status }}</td>
           <td class="row-actions">
             <button
@@ -63,7 +85,7 @@
           </td>
         </tr>
         <tr v-if="!rows.length">
-          <td :colspan="meta.fields.length + 2" class="empty-state">
+          <td :colspan="meta.fields.length + (isMetadataTag ? 3 : 2)" class="empty-state">
             暂无{{ meta.name }}数据，可先登记{{ meta.entity }}
           </td>
         </tr>
@@ -115,6 +137,11 @@ const filterFields = meta.fields.slice(0, 3)
 const showCreate = ref(false)
 const creating = ref(false)
 const createValues = ref<Record<string, string>>({})
+const isMetadataTag = meta.key === 'metadata_tag'
+const dispatchOnly = ref(false)
+const dispatchBatch = ref('')
+const dispatchOwner = ref('')
+const includeResidue = ref(false)
 const stats = computed(() => [
   { label: meta.metrics[0], value: total.value },
   { label: meta.metrics[1], value: rows.value.filter((row) => row.status === meta.statuses[1]).length },
@@ -132,7 +159,20 @@ const statusSummary = computed(() =>
 
 function resetFilters() {
   filters.value = {}
+  dispatchBatch.value = ''
+  dispatchOwner.value = ''
+  includeResidue.value = false
   void reload()
+}
+
+function ownerLabel(row: EntryRow): string {
+  const target = String(row['目标归属分类'] ?? '')
+  const owner = String(row['归属分类'] ?? '')
+  const confirmed = String(row['归属确认'] ?? '')
+  if (String(row['返修来源'] ?? '') === 'legacy-residue') return '历史残留·不派发'
+  if (!owner && !target) return '待确认'
+  const label = target || owner
+  return `${label}${confirmed === '已确认' ? '' : '（待确认）'}`
 }
 
 async function exportRows() {
@@ -179,7 +219,12 @@ async function runAction(action: string, row: EntryRow) {
 async function reload() {
   errorMessage.value = ''
   try {
-    const payload = await listEntries(meta.key, filters.value)
+    const payload = await listEntries(meta.key, filters.value, {
+      dispatch: isMetadataTag && dispatchOnly.value,
+      batch: isMetadataTag ? dispatchBatch.value.trim() : '',
+      owner: isMetadataTag ? dispatchOwner.value.trim() : '',
+      includeResidue: isMetadataTag && includeResidue.value,
+    })
     rows.value = payload.items
     total.value = payload.total
   } catch (error) {
